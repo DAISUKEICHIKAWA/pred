@@ -1,0 +1,184 @@
+################################################
+#######                                  #######
+#######        パッケージの読み込み             #######
+#######                                  #######
+################################################
+library(car)
+library(HLMdiag)
+library(ggplot2)
+library(influence.ME)
+library(alr3)
+################################################
+#######                                  #######
+#######        シミュレーションデータ発生           #######
+#######                                  #######
+################################################
+
+##### シミュレーション設定　###########
+##### simlation 回数 ##############
+sim = 100;
+##### 個体数 N #####
+N = 1000;
+#####　外れ値の割合 #####
+p_outliers = 0.05;
+##### 外れ値の個体数 #####
+N_outliers = round(N * 0.05)
+##### Normalの個体数 ######
+N_normal = N - N_outliers;
+seed = 4989+5;#seedの固定
+         ############################
+         #######              #######
+         #######	   真の分布   #######
+         #######              #######
+         ############################
+for(i in 1:sim){
+set.seed(seed, kind = NULL);
+##### sex (sex = 1 "male") ###########
+sex <- rbinom(N_normal,1,0.5);
+sex <- matrix(sex, nrow=N_normal, ncol=1, byrow=T);
+##### 運動量と食事制限の乱数
+t.mean.interv = 12;
+t.sig.interv = 0.3;
+intervention = rbinom(N_normal*2,t.mean.interv,t.sig.interv);
+intervention = matrix(intervention, nrow=N_normal, ncol=2, byrow=T);
+##### pre_weight ベースラインの体重
+t.mean.weight = 60;
+t.sig.weight = 10;
+pre_weight = rnorm(N_normal,t.mean.weight,t.sig.weight);
+pre_weight = matrix(pre_weight,nrow=N_normal,ncol=1,byrow=T);
+colnames(sex) = c("sex");
+colnames(intervention) = c("exercise","diet");
+colnames(pre_weight) = c("pre_weight");
+sex = data.frame(sex);
+intervention = data.frame(intervention);
+pre_weight = data.frame(pre_weight);
+data_normal = data.frame(sex,pre_weight,intervention);
+data_normal$pre_weight = data_normal$pre_weight + 10 * data_normal$sex
+############ 応答変数の設定
+t.beta.pre_w = 1;
+t.beta.exer = -0.2;
+t.beta.diet = -0.2;
+t.sig = 1;
+data_normal$post_weight = t.beta.pre_w * data_normal$pre_weight + t.beta.exer * data_normal$exercise + t.beta.diet * data_normal$diet + rnorm(N_normal,0,t.sig);
+####### normalのデータにインデックスを付加 ##############
+ind_outliers = rep(0,length = N_normal)
+ind_outliers <- matrix(ind_outliers, nrow=N_normal, ncol=1, byrow=T);
+colnames(ind_outliers) = c("outliers")
+ind_outliers = data.frame(ind_outliers);
+data_normal = data.frame(data_normal,ind_outliers);
+lm_normal <- lm(data_normal$post_weight ~ ., data = data_normal[1:5])
+#summary(lm)
+         ################################
+         #######                  #######
+         #######	   外れ値の発生   ########
+         #######              　　　　#######
+         ################################
+##### sex (sex = 1 "male") ###########
+sex <- rbinom(N_outliers,1,0.1);
+sex <- matrix(sex, nrow=N_outliers, ncol=1, byrow=T);
+##### 運動量と食事制限の乱数
+o.mean.interv = 8;
+o.sig.interv = 0.3;
+intervention = rbinom(N_outliers*2,o.mean.interv,o.sig.interv);
+intervention = matrix(intervention, nrow=N_outliers, ncol=2, byrow=T);
+##### pre_weight ベースラインの体重
+o.mean.weight = 70;
+o.sig.weight = 10;
+pre_weight = rnorm(N_outliers,o.mean.weight,o.sig.weight);
+pre_weight = matrix(pre_weight,nrow=N_outliers,ncol=1,byrow=T);
+colnames(sex) = c("sex");
+colnames(intervention) = c("exercise","diet");
+colnames(pre_weight) = c("pre_weight");
+sex = data.frame(sex);
+intervention = data.frame(intervention);
+pre_weight = data.frame(pre_weight);
+data_outliers = data.frame(sex,pre_weight,intervention);
+data_outliers$pre_weight = data_outliers$pre_weight + 10 * data_outliers$sex
+############ 応答変数の設定
+o.beta.pre_w = 1.2;
+o.beta.exer = -0.5;
+o.beta.diet = -0.5;
+o.sig = 1;
+data_outliers$post_weight = o.beta.pre_w * data_outliers$pre_weight + o.beta.exer * data_outliers$exercise + o.beta.diet * data_outliers$diet + rnorm(N_outliers,0,o.sig);
+####### normalのデータにインデックスを付加 ##############
+ind_outliers = rep(1,length = N_outliers)
+ind_outliers <- matrix(ind_outliers, nrow=N_outliers, ncol=1, byrow=T);
+colnames(ind_outliers) = c("outliers")
+ind_outliers = data.frame(ind_outliers);
+data_outliers = data.frame(data_outliers,ind_outliers);
+lm_outliers <- lm(data_outliers$post_weight ~ ., data = data_outliers[1:5])
+#summary(lm_outliers)
+################################
+#######                  #######
+#######	 データの結合   ########
+#######              　　　　#######
+#################################
+data <- rbind(data_normal,data_outliers)
+data$ID <- rep(1:nrow(data),by =1)
+########  外れ値の検出 ##############
+######## which measures the effect on beta ########
+lm <- lm(data$post_weight ~ ., data = data[1:5])
+#summary(lm)
+#inf.m <- fortify(lm,data)
+#influence.m <- influence.measures(lm)
+#inf.index(lm)
+#ggplot(data = inf.m,aes(x=inf.m$ID,y=inf.m$.cooksd)) + geom_point()
+######## cook's distance #############
+######### 棄却域
+######## Detection of Influential Observation in Linear Regression ##########
+cooks.d <- cooks.distance(lm)
+cooks.data <- cbind(data,cooks.d)
+cooks.crit <- qf(0.5,lm$rank,lm$df.residual, lower.tail = FALSE)
+cooks.model <- subset(cooks.data, cooks.data$cooks.d <= cooks.crit)
+########### dffits #################
+dffits <- dffits(lm)
+Dffits <- cbind(data,dffits) 
+diffits.model <- subset(Dffits, abs(Dffits$dffits) <= 2*sqrt(lm$rank / N))
+
+########### Atkinson’s C ###########
+Atkinson <- sqrt(lm$df.residual / lm$rank) * abs(dffits)
+Atkinson_C <- cbind(data,Atkinson)
+Atkinson.model <- subset(Atkinson_C, Atkinson_C$Atkinson <= (2 * sqrt(lm$df.residual / N)))
+
+########## COVRATIO ##############
+covratio <- covratio(lm)
+covratio.data <- cbind(data,covratio)
+covratio.model <- subset(covratio.data, covratio.data$covratio >= (1 - 3 * lm$rank / N))
+covratio.model <- subset(covratio.model,covratio.model$covratio <= (1 + 3 * lm$rank / N))
+
+######### 外れ値を除外したdataでモデルを構築
+cook.lm <- lm(cooks.model$post_weight ~ ., data = cooks.model[1:5])
+dffits.lm <- lm(diffits.model$post_weight ~ ., data = diffits.model[1:5])
+Atkinson.lm <- lm(Atkinson.model$post_weight ~ ., data = Atkinson.model[1:5])
+covratio.lm <- lm(covratio.model$post_weight ~ ., data = covratio.model[1:5])
+
+model.coef <- data.frame(rbind(cook.lm$coef,dffits.lm$coef,Atkinson.lm$coef,covratio.lm$coef))
+model.coef <- data.frame(criteria = c("cooks.distance","diffits","Atkinson","covratio"),model.coef)
+
+#### bias 
+bias <- cbind((model.coef$X.Intercept. - 0),(model.coef$sex - 0),
+(model.coef$pre_weight - t.beta.pre_w),(model.coef$exercise - t.beta.exer),
+(model.coef$diet - t.beta.diet))
+colnames(bias) <- c("Intercept","sex","pre_weight","exercise","diet")
+bias <- data.frame(criteria = c("cooks.distance","diffits","Atkinson","covratio"),bias)
+if(i == 1){
+bias.out <- data.frame(sim = i, bias)
+}else{
+bias.out <- rbind(bias.out, data.frame(sim = i, bias))
+}
+
+#### SE
+SE <- bias[,1:lm$rank+1]^2
+SE <- data.frame(criteria = c("cooks.distance","diffits","Atkinson","covratio"),SE)
+if(i == 1){
+SE.out <- data.frame(sim = i, SE)
+}else{
+SE.out <- rbind(SE.out, data.frame(sim = i, SE))
+}
+}#loopの終わり
+bias.out <- data.frame(name = "bias",bias.out)
+SE.out <- data.frame(name = "SE",SE.out)
+output <- rbind(bias.out,SE.out)
+head(output)
+summary <- ddply(output, .(name,criteria), summarise, 
+Intercept_mean=mean(Intercept),sex_mean = mean(sex),pre_weight_mean = mean(pre_weight),exercise_mean = mean(exercise),diet_mean = mean(diet))
