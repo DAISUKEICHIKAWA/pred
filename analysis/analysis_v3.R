@@ -1,5 +1,4 @@
 ##### プログラム保存場所と作業ディレクトリの変更
-setwd("C:/Users/Arai_lenovo/Documents/laboratory/HCC/work/analysis")
 getwd()
 ##### ライブラリの読み込み
 library(ggplot2)
@@ -17,7 +16,7 @@ library(sampling)
 set.seed(5963)
 
 ##### データの読み込み
-testdata <- read.csv("../data/testdata.csv", header=T)
+testdata <- read.csv("C:/Users/Arai_lenovo/Documents/laboratory/HCC/work/data/testdata.csv", header=T)
 #head(testdata)
 
 
@@ -120,7 +119,8 @@ AUC <- data.frame(rbind(logi.f.AUC,logi.s.AUC,LASSO.AUC))
 colnames(AUC) <- c("AUC")
 rownames(AUC) <- c("full.model","stepwise.model","LASSO.model")
 
-png("graph.png")
+graph.png <- paste(out,".png",sep="")
+png(graph.png)
 par(mfrow=c(2,2))
 logi.f.ROC <- Epi::ROC(test = logit_f.ROC$score, stat=logit_f.ROC$Y,plot=c("ROC"),main="full.model")
 logi.s.ROC <- Epi::ROC(test = logit_s.ROC$score, stat=logit_s.ROC$Y,plot=c("ROC"),main="stepwise.model")
@@ -130,30 +130,38 @@ dev.off()
 logi.f.mx <- max(logi.f.ROC$res[, 1] + logi.f.ROC$res[, 2])#感度，特異度の和の最大値
 logi.f.mhv <- which((logi.f.ROC$res[, 1] + logi.f.ROC$res[, 2]) == logi.f.mx)#感度・特異度の和の最大値のindex
 logi.f.Sens <- logi.f.ROC$res[logi.f.mhv,1]#Sensitivity
-logi.f.Spec <- logi.f.ROC$res[logi.f.mhv,1]#Specificity
+logi.f.Spec <- logi.f.ROC$res[logi.f.mhv,2]#Specificity
+logi.f.Score <- logi.f.ROC$res[logi.f.mhv,5]#Score
 logi.f.res <- cbind(logi.f.Sens,logi.f.Spec)
 
 logi.s.mx <- max(logi.s.ROC$res[, 1] + logi.s.ROC$res[, 2])
 logi.s.mhv <- which((logi.s.ROC$res[, 1] + logi.s.ROC$res[, 2]) == logi.s.mx)
 logi.s.Sens <- logi.s.ROC$res[logi.s.mhv,1]#Sensitivity
-logi.s.Spec <- logi.s.ROC$res[logi.s.mhv,1]#Specificity
+logi.s.Spec <- logi.s.ROC$res[logi.s.mhv,2]#Specificity
+logi.s.Score <- logi.s.ROC$res[logi.s.mhv,5]#Score
 logi.s.res <- cbind(logi.s.Sens,logi.s.Spec)
 
 LASSO.mx <- max(LASSO.ROC$res[, 1] + LASSO.ROC$res[, 2])
 LASSO.mhv <- which((LASSO.ROC$res[, 1] + LASSO.ROC$res[, 2]) == LASSO.mx)
 LASSO.Sens <- LASSO.ROC$res[LASSO.mhv,1]#Sensitivity
-LASSO.Spec <- logi.s.ROC$res[LASSO.mhv,1]#Specificity
+LASSO.Spec <- LASSO.ROC$res[LASSO.mhv,2]#Specificity
+LASSO.Score <- LASSO.ROC$res[LASSO.mhv,5]#Score
 LASSO.res <- cbind(LASSO.Sens,LASSO.Spec)
 
 Sens.Spec <- rbind(logi.f.res,logi.s.res,LASSO.res)
+Score <- rbind(logi.f.Score,logi.s.Score,LASSO.Score)
 colnames(Sens.Spec) <- c("Sensitivity","Specificity")
 rownames(Sens.Spec) <- c("full.model","stepwise.model","LASSO.model")
-
-res <- list(AUC,Sens.Spec)
+rownames(Score) <- c("full.model","stepwise.model","LASSO.model")
+colnames(Score) <- c("Score")
+res <- list(AUC,Sens.Spec,Score)
 return(res)
 }
 
 # outcome
+###### outcome variable
+out <- c("sbpj")
+csv <- paste(out,".csv",sep="")
 res <- func(out,pred)
-write.csv(res,"output.csv")
+write.csv(res,csv)
 
