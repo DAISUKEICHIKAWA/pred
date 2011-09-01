@@ -165,3 +165,10 @@ csv <- paste(out,".csv",sep="")
 res <- func(out,pred)
 write.csv(res,csv)
 
+out <- c("dbpj")
+csv <- paste(out,".csv",sep="")
+res <- func(out,pred)
+write.csv(res,csv)
+
+
+
