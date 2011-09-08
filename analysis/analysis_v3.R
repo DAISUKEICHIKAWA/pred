@@ -1,4 +1,5 @@
 ##### プログラム保存場所と作業ディレクトリの変更
+setwd("C:/Users/Arai_lenovo/Documents/laboratory/HCC/work/analysis")
 getwd()
 ##### ライブラリの読み込み
 library(ggplot2)
@@ -16,7 +17,9 @@ library(sampling)
 set.seed(5963)
 
 ##### データの読み込み
-testdata <- read.csv("C:/Users/Arai_lenovo/Documents/laboratory/HCC/work/data/testdata.csv", header=T)
+testdata <- read.csv("../data/testdata.csv", header=T)
+testdata$fbg <- ifelse(testdata$fbg >= 200, 200, testdata$fbg)
+testdata$tg <- ifelse(testdata$tg >= 400, 400, testdata$tg)   
 #head(testdata)
 
 
@@ -41,29 +44,43 @@ tdc$hdlr <- (as.numeric(cut(tdc$hdl3, right=FALSE, breaks=c(-Inf, 39, Inf), labe
 tdc$fbgr <- as.numeric(cut(tdc$fbg3, right=FALSE, breaks=c(-Inf, 100, Inf), labels=c(0,1)))-1
 tdc$hba1cr <-as.numeric( cut(tdc$hba1c3, right=FALSE, breaks=c(-Inf, 5.2, Inf), labels=c(0,1)))-1
 
+
+#head(tdc)
+#層別解析(性別の指定)
+sex_flag <- c("男性")##### 性別の指定(男性，女性以外を入力すると，全データ)
+if(sex_flag == "男性"){
+tdc <- subset(tdc,tdc$sex==1)
+X <- cbind(tdc$age, tdc$sbpr, tdc$dbpr, tdc$tgr, tdc$hdlr, tdc$fbgr, tdc$hba1cr)#samplecube関数はvectorでしか受け付けない
+
+}else if(sex_flag == "女性"){
+tdc <- subset(tdc,tdc$sex==2)
+X <- cbind(tdc$age, tdc$sbpr, tdc$dbpr, tdc$tgr, tdc$hdlr, tdc$fbgr, tdc$hba1cr)#samplecube関数はvectorでしか受け付けない
+}else{
+X <- cbind(tdc$sex, tdc$age, tdc$sbpr, tdc$dbpr, tdc$tgr, tdc$hdlr, tdc$fbgr, tdc$hba1cr)#samplecube関数はvectorでしか受け付けない
+}
+
 #サンプリング(cube法を使用、性年齢比を反映する形で調整、10分の1をサンプリング)
 #保健指導リスクの両方の割合が同等になるように
-X <- cbind(tdc$sex, tdc$age, tdc$sbpr, tdc$dbpr, tdc$tgr, tdc$hdlr, tdc$fbgr, tdc$hba1cr)#samplecube関数はvectorでしか受け付けない
+#X <- cbind(tdc$sex, tdc$age, tdc$sbpr, tdc$dbpr, tdc$tgr, tdc$hdlr, tdc$fbgr, tdc$hba1cr)#samplecube関数はvectorでしか受け付けない
 #p Training data の割合を決定
 p <- rep(0.9, nrow(tdc))
 sample <- samplecube(X, p,1,FALSE)
 Train <- tdc[sample==0, ]
 Valid <- tdc[sample==1, ]
-##### 
-#head(Train)
-#head(Valid)
 
-
-#head(tdc)
 ###### outcome variable
 out <- c("sbpj")
 ###### predictor variable
+bg_type <- c("fbg")##### 予測因子の指定
+if (bg_type == "fbs"){
 pred <- c(
-"age", "sex", "bmi", "sbp", "dbp", "tg", "hdl", "ldl", "got", "gpt", "ggtp", "fbg", "hba1c", "hb",
-"bmi2", "sbp2", "dbp2", "tg2", "hdl2", "ldl2", "got2", "gpt2", "ggtp2", "fbg2", "hba1c2", "hb2")
-##### or
-#pred <- c(1:14,18:29)
-#head(Train[c(pred)])
+"age", "bmi", "sbp", "dbp", "tg", "hdl", "ldl", "got", "gpt", "ggtp", "fbg", "hb",
+"bmi2", "sbp2", "dbp2", "tg2", "hdl2", "ldl2", "got2", "gpt2", "ggtp2", "fbg2","hb2")
+}else if(bg_type == "hba1c"){
+pred <- c(
+"age", "bmi", "sbp", "dbp", "tg", "hdl", "ldl", "got", "gpt", "ggtp", "hba1c", "hb",
+"bmi2", "sbp2", "dbp2", "tg2", "hdl2", "ldl2", "got2", "gpt2", "ggtp2","hba1c2", "hb2")
+}
 
 func <- function(out,pred){
 
@@ -111,7 +128,6 @@ logi.s.AUC <- performance(pred.s.valid,"auc")@y.values[[1]]
 LASSO.valid <- predict(glmnet,newx=do.call(cbind,Valid[c(pred)]),family="binomial")
 LASSO.ROC <- data.frame(cbind(Valid[,c(out)],LASSO.valid))
 colnames(LASSO.ROC) <- c("Y","score")
-#Epi::ROC(test = LASSO.ROC$score, stat=LASSO.ROC$Y)
 pred.L.valid <- prediction(LASSO.ROC$score,LASSO.ROC$Y)
 LASSO.AUC <- performance(pred.L.valid,"auc")@y.values[[1]]
 #LASSO.AUC <- DiagnosisMed::ROC(LASSO.ROC$Y,LASSO.ROC$score)
@@ -119,7 +135,8 @@ AUC <- data.frame(rbind(logi.f.AUC,logi.s.AUC,LASSO.AUC))
 colnames(AUC) <- c("AUC")
 rownames(AUC) <- c("full.model","stepwise.model","LASSO.model")
 
-graph.png <- paste(out,".png",sep="")
+label <- paste(out,sex_flag,bg_type,sep="_")
+graph.png <- paste(label,".png",sep="")
 png(graph.png)
 par(mfrow=c(2,2))
 logi.f.ROC <- Epi::ROC(test = logit_f.ROC$score, stat=logit_f.ROC$Y,plot=c("ROC"),main="full.model")
@@ -154,21 +171,67 @@ colnames(Sens.Spec) <- c("Sensitivity","Specificity")
 rownames(Sens.Spec) <- c("full.model","stepwise.model","LASSO.model")
 rownames(Score) <- c("full.model","stepwise.model","LASSO.model")
 colnames(Score) <- c("Score")
-res <- list(AUC,Sens.Spec,Score)
-return(res)
+##### 各回帰法のAUC，感度，特異度とカットオフスコア
+res <- cbind(AUC,Sens.Spec,Score)
+##### 各回帰法における回帰係数
+lst <- list(data.frame(coef(logit.full)),data.frame(coef(logit.step)),data.frame(as.matrix(glmnet$coefficients)))
+lst2 <- lapply(lst, function(a) t(data.frame(a)))
+n <- length(lst2)
+temp <- lst2[[1]]
+for (i in 2:n) {
+temp <- merge(temp, lst2[[i]], all=T, sort=F)
+}
+coef <- temp
+rownames(coef) <- names(lst)
+rownames(coef) <- c("full.model","stepwise.model","LASSO.model")
+coef
+res2 <- cbind(coef,res)
+out_label <- data.frame(c(out,out,out))
+colnames(out_label) <- c("対象リスク")
+res3 <- cbind(out_label,res2)
+csv <- paste(label,".csv",sep="")
+write.csv(res2,csv)
+return(res3)
 }
 
 # outcome
 ###### outcome variable
 out <- c("sbpj")
-csv <- paste(out,".csv",sep="")
-res <- func(out,pred)
-write.csv(res,csv)
+res_sbpj <- func(out,pred)
 
 out <- c("dbpj")
-csv <- paste(out,".csv",sep="")
-res <- func(out,pred)
-write.csv(res,csv)
+res_dbpj <- func(out,pred)
 
+out <- c("tgj")
+res_tgj <- func(out,pred)
 
+out <- c("hdlj")
+res_hdlj <- func(out,pred)
 
+out <- c("fbsj")
+res_fbsj <- func(out,pred)
+
+out <- c("hba1cj")
+res_hba1cj <- func(out,pred)
+
+out <- c("sbpr")
+res_sbpr <- func(out,pred)
+
+out <- c("dbpr")
+res_dbpr <- func(out,pred)
+
+out <- c("tgr")
+res_tgr <- func(out,pred)
+
+out <- c("hdlr")
+res_hdlr <- func(out,pred)
+
+out <- c("fbsr")
+res_fbsr <- func(out,pred)
+
+out <- c("hba1cr")
+res_hba1cr <- func(out,pred)
+
+res <- rbind(res_sbpj,res_dbpj,res_tgj,res_hdlj,res_hba1cj,res_sbpr,res_dbpr,res_tgr,res_hdlr,res_hba1cr)
+
+write.csv(res,paste(sex_flag,bg_type,".csv",sep=""))
